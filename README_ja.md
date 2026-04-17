@@ -1,6 +1,6 @@
 # docker-uv
 
-`docker-uv` は、macOS に `uv` をインストールせずに `uv` と `uvx` を使いたいときのための、小さな Docker ベースのラッパーです。
+`docker-uv` は、macOS に `uv` をインストールせずに `uv` と `uvx` を使いたいときのための、小さな Docker ベースのツールキットです。状態確認やメンテナンスには `duv` を使えます。
 
 [English README](./README.md)
 
@@ -10,9 +10,10 @@
 
 - Astral 公式の `uv` イメージを使う Docker Compose 設定
 - コンテナ内の `uv` / `uvx` を呼び出すホスト側ラッパースクリプト
+- 状態確認や掃除に使える `duv` の対話コンソール
 - 再実行を速くする cache と、`uv tool install` 用の永続保存先
 
-`uv` と `uvx` の実体は Docker の中にだけあり、macOS 側へネイティブインストールする必要はありません。
+`uv` と `uvx` の実体は Docker の中にだけあり、macOS 側へネイティブインストールする必要はありません。ホスト側で入れるのは軽い wrapper と `duv` だけです。
 
 ## 前提
 

@@ -1,14 +1,14 @@
 # docker-uv
 
-`docker-uv` is a small Docker-based wrapper for people who want to use `uv` and `uvx` on macOS without installing `uv` on the host.
+`docker-uv` is a small Docker-based toolkit for people who want to use `uv` and `uvx` on macOS without installing `uv` on the host, with `duv` for interactive status and maintenance tasks.
 
 [日本語はこちら](./README_ja.md)
 
 ## Overview
 
-This repository includes a Docker Compose service based on Astral's official `uv` image, along with small host-side wrapper scripts for `uv`, `uvx`, and a few related helper commands.
+This repository includes a Docker Compose service based on Astral's official `uv` image, along with small host-side wrapper scripts for `uv`, `uvx`, `duv`, and a few related helper commands.
 
-The actual `uv` and `uvx` binaries live inside Docker. On the macOS side, you only install lightweight wrapper scripts.
+The actual `uv` and `uvx` binaries live inside Docker. On the macOS side, you only install lightweight wrapper scripts and the `duv` helper console.
 
 ## Requirements
 
