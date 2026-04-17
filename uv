@@ -1,0 +1,52 @@
+#!/bin/sh
+set -eu
+
+resolve_path() {
+  target=$1
+
+  while [ -L "$target" ]; do
+    target_dir=$(CDPATH='' cd -- "$(dirname -- "$target")" && pwd -P)
+    target_link=$(readlink "$target")
+
+    case "$target_link" in
+      /*) target=$target_link ;;
+      *) target=$target_dir/$target_link ;;
+    esac
+  done
+
+  target_dir=$(CDPATH='' cd -- "$(dirname -- "$target")" && pwd -P)
+  printf '%s/%s\n' "$target_dir" "$(basename -- "$target")"
+}
+
+SCRIPT_PATH=$(resolve_path "$0")
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
+CURRENT_DIR=$(pwd -P)
+
+case "$CURRENT_DIR" in
+  "$REPO_ROOT")
+    RELATIVE_DIR=""
+    ;;
+  "$REPO_ROOT"/*)
+    RELATIVE_DIR=${CURRENT_DIR#"$REPO_ROOT"}
+    ;;
+  *)
+    printf 'This wrapper only works inside %s\n' "$REPO_ROOT" >&2
+    exit 1
+    ;;
+esac
+
+CONTAINER_DIR=/workspace$RELATIVE_DIR
+
+run_compose() {
+  env UID="$(id -u)" GID="$(id -g)" \
+    docker compose \
+      --project-directory "$REPO_ROOT" \
+      -f "$REPO_ROOT/compose.yaml" \
+      run --rm --no-deps "$@"
+}
+
+if [ -t 0 ] && [ -t 1 ]; then
+  run_compose -w "$CONTAINER_DIR" uv uv "$@"
+else
+  run_compose -T -w "$CONTAINER_DIR" uv uv "$@"
+fi

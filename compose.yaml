@@ -1,0 +1,14 @@
+services:
+  uv:
+    image: ghcr.io/astral-sh/uv:python3.12-trixie-slim
+    user: "${UID:-1000}:${GID:-1000}"
+    working_dir: /workspace
+    environment:
+      HOME: /tmp/uv-home
+      UV_CACHE_DIR: /workspace/.docker/uv-cache
+      UV_LINK_MODE: copy
+    volumes:
+      - .:/workspace
+    stdin_open: true
+    tty: true
+

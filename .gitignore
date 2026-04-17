@@ -1,0 +1,4 @@
+.docker/uv-cache/
+.venv/
+__pycache__/
+
