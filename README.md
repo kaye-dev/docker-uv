@@ -1,42 +1,60 @@
 # docker-uv
 
-`uv` を macOS にインストールせず、Docker コンテナ内だけで実行するための最小構成です。
+Minimal Docker-based `uv` wrapper for macOS users who do not want to install `uv` on the host machine.
 
-## 使い方
+[日本語はこちら](./README_ja.md)
 
-前提:
-- Docker Desktop など、`docker compose` が使えること
+## Overview
 
-このリポジトリ直下の `uv` は、Docker Compose 経由で `ghcr.io/astral-sh/uv:python3.12-trixie-slim` を起動するラッパーです。
+This repository provides:
 
-リポジトリ配下のどこからでも `uv` と打てるようにするには、1 回だけシンボリックリンクを張ります。
+- a Docker Compose service based on the official Astral `uv` image
+- a small `uv` wrapper script that runs `uv` inside the container
+- a local cache directory for faster repeated runs
+
+The `uv` binary lives inside Docker only. Your macOS host does not need a native `uv` installation.
+
+## Requirements
+
+- macOS
+- Docker Desktop, Colima, or another Docker environment with `docker compose`
+- a POSIX-compatible shell such as `zsh` or `sh`
+
+## How It Works
+
+The wrapper script at `./uv`:
+
+- resolves the repository root
+- checks that the current directory is inside this repository
+- launches `ghcr.io/astral-sh/uv:python3.12-trixie-slim` with Docker Compose
+- forwards your current working directory into the container
+
+The project is mounted to `/workspace`, and the `uv` cache is stored in `.docker/uv-cache/`.
+
+## Setup
+
+From the repository root:
 
 ```sh
 mkdir -p "$HOME/bin"
 ln -sf "$(pwd)/uv" "$HOME/bin/uv"
 ```
 
-`~/bin` が `PATH` に入っていなければ、`~/.zshrc` に次を追加します。
+If `~/bin` is not already on your `PATH`, add this to `~/.zshrc`:
 
 ```sh
 export PATH="$HOME/bin:$PATH"
 ```
 
-反映:
+Reload your shell:
 
 ```sh
 source ~/.zshrc
 ```
 
-## 動作
+## Usage
 
-- `uv` 本体は macOS に入りません
-- 実体は Docker コンテナ内の `uv` です
-- カレントディレクトリがこのリポジトリ配下のときだけ動きます
-- 作業ディレクトリは現在位置に追従します
-- `uv` のキャッシュは `.docker/uv-cache/` に保存されます
-
-## 例
+Run `uv` anywhere inside this repository:
 
 ```sh
 uv --version
@@ -45,4 +63,20 @@ uv sync
 uv run python -V
 ```
 
-初回実行時は Docker イメージの pull が走ります。
+The first run pulls the Docker image if it is not already available locally.
+
+## Limitations
+
+- The wrapper only works while your current directory is inside this repository.
+- Docker must be running before you execute `uv`.
+- This project is designed to avoid installing `uv` on the host, not to replace Docker itself.
+
+## Files
+
+- `compose.yaml`: Docker Compose definition for the `uv` container
+- `uv`: host-side wrapper script
+- `.docker/uv-cache/`: local cache directory used by `uv` inside the container
+
+## License
+
+This project is licensed under the MIT License. See [LICENSE](./LICENSE).
