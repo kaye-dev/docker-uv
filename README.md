@@ -150,6 +150,17 @@ uv tool dir --bin
 
 The first run pulls the Docker image if it is not already available locally.
 
+## Feedback and Requests
+
+Bug reports and feature requests are welcome through GitHub Issues.
+
+Issue templates are available for:
+
+- bug reports
+- feature requests
+
+If you are opening an issue, include your macOS version, Docker or Colima setup, and the command you ran when the problem occurred.
+
 ## Uninstall and Cleanup
 
 If you want to stop using these wrappers, remove the symlinks:

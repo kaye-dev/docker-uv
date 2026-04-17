@@ -164,6 +164,17 @@ uv tool dir --bin
 
 初回実行時は Docker イメージの pull が入ります。
 
+## フィードバックと要望
+
+不具合報告や機能要望は、GitHub Issues で受け付けています。
+
+issue は書きやすいように、次のテンプレートを用意しています。
+
+- bug report
+- feature request
+
+issue を作成するときは、macOS のバージョン、Docker または Colima の構成、問題が起きたときに実行したコマンドも添えてください。
+
 ## アンインストールと掃除
 
 利用をやめるだけなら、まずは symlink を削除します。

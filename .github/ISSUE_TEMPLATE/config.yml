@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: docker-uv README
+    url: https://github.com/kaye-dev/docker-uv#readme
+    about: Check the README for setup, Colima usage, and maintenance commands before opening an issue.

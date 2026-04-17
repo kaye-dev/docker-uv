@@ -1,0 +1,46 @@
+name: Feature request
+description: Suggest an improvement for docker-uv
+title: "[Feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing an idea.
+        Clear use cases make it much easier to evaluate and implement.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What are you trying to do, and what is difficult today?
+      placeholder: Describe the workflow or pain point
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: What would you like docker-uv to do?
+      placeholder: Describe the feature you want
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Have you tried another approach or workaround?
+      placeholder: Describe alternatives, workarounds, or related tools
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else that would help evaluate the request
+      placeholder: Target users, environment details, examples, links
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues before opening this request
+          required: true
