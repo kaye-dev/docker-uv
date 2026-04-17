@@ -5,10 +5,20 @@ services:
     working_dir: /workspace
     environment:
       HOME: /tmp/uv-home
-      UV_CACHE_DIR: /workspace/.docker/uv-cache
+      PATH: /var/uv-tools/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      UV_CACHE_DIR: /var/uv-cache
       UV_LINK_MODE: copy
+      UV_TOOL_BIN_DIR: /var/uv-tools/bin
+      UV_TOOL_DIR: /var/uv-tools/tools
     volumes:
-      - .:/workspace
+      - type: bind
+        source: ${WORKSPACE_DIR:-.}
+        target: /workspace
+      - type: bind
+        source: ./.docker/uv-cache
+        target: /var/uv-cache
+      - type: bind
+        source: ./.docker/uv-tools
+        target: /var/uv-tools
     stdin_open: true
     tty: true
-
