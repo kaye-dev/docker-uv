@@ -22,6 +22,39 @@
 - `docker compose` が使える Docker Desktop、Colima、または同等の Docker 環境
 - `zsh` や `sh` などの POSIX 互換シェル
 
+## Colima を使う場合
+
+Docker Desktop を入れたくない場合は、macOS では Colima を使う構成でも動かせます。
+
+まずは Homebrew で必要なパッケージを入れます。
+
+```sh
+brew install docker docker-compose colima
+```
+
+環境によっては、これだけだと `docker compose` が認識されないことがあります。その場合は Docker CLI plugin として登録します。
+
+```sh
+mkdir -p ~/.docker/cli-plugins
+ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+```
+
+その後、Colima を起動して動作確認します。
+
+```sh
+colima start
+docker version
+docker compose version
+docker container run hello-world
+```
+
+Colima 起動中でも外部ツールが Docker ソケットを見つけられない場合は、`DOCKER_HOST` を明示してください。
+
+```sh
+echo 'export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ## 仕組み
 
 リポジトリ直下の `./uv` と `./uvx` は、次の流れで動きます。
@@ -34,6 +67,8 @@
 - `uv tool install` で入れた tool は `.docker/uv-tools/` に保存する
 
 そのため、作業中のディレクトリ感覚をあまり変えずに、Docker ベースの `uv` / `uvx` を使えます。
+
+なお、`docker-uv` は常駐コンテナを持つ構成ではありません。毎回 `docker compose run --rm` で都度コンテナを起動するため、このリポジトリにおける「起動している」は「Docker ランタイムに接続でき、必要なときに新しいコンテナを起動できる」状態を指します。
 
 ## この構成でできること
 
@@ -54,10 +89,12 @@
 
 ```sh
 mkdir -p "$HOME/bin"
+ln -sf "$(pwd)/duv" "$HOME/bin/duv"
 ln -sf "$(pwd)/uv" "$HOME/bin/uv"
 ln -sf "$(pwd)/uvx" "$HOME/bin/uvx"
 ln -sf "$(pwd)/uv-refresh" "$HOME/bin/uv-refresh"
 ln -sf "$(pwd)/uv-cache-clean" "$HOME/bin/uv-cache-clean"
+ln -sf "$(pwd)/docker-uv-status" "$HOME/bin/docker-uv-status"
 ```
 
 `~/bin` が `PATH` に入っていない場合は、`~/.zshrc` に次を追加してください。
@@ -88,13 +125,28 @@ uvx ruff --version
 補助コマンドも用意しています。
 
 ```sh
+duv
 uv-refresh
 uv-cache-clean
 uv-cache-clean ruff
+docker-uv-status
 ```
 
 - `uv-refresh` は `uv sync --refresh` のショートカットです
 - `uv-cache-clean` は、その project に分離された cache に対する `uv cache clean` のショートカットです
+
+`duv` は `docker-uv` 用の対話コンソールです。次のような確認や操作を 1 つの menu から行えます。
+
+- Docker / context / Colima / `docker-uv` の状態確認
+- Colima の起動と停止
+- install 済み tool の一覧確認
+- cache / tools / metadata の容量確認
+- 古くなった見直し候補の確認
+- project cache の削除、tool の削除、ローカルデータのリセット
+
+さらに、wrapper は `.docker/state/` 配下に軽い利用記録を残します。`docker-uv-status` を実行すると、30 日以上動きのない project cache や install 済み tool を見直し候補として確認できます。
+
+古い候補がある場合は、wrapper 実行時に 1 日 1 回まで短い案内を表示します。不要であれば `DOCKER_UV_NO_HINTS=1` を設定してください。
 
 `uvx` を前提とする MCP クライアントや、各種ローカル自動化設定でも、このラッパーをホストの `uvx` の代わりとして利用できます。
 ただし、MCP の設定形式はクライアントごとに異なるため、このリポジトリでは特定の設定ファイル形式までは固定していません。
@@ -114,15 +166,15 @@ uv tool dir --bin
 利用をやめるだけなら、まずは symlink を削除します。
 
 ```sh
-rm -f "$HOME/bin/uv" "$HOME/bin/uvx" "$HOME/bin/uv-refresh" "$HOME/bin/uv-cache-clean"
+rm -f "$HOME/bin/duv" "$HOME/bin/uv" "$HOME/bin/uvx" "$HOME/bin/uv-refresh" "$HOME/bin/uv-cache-clean" "$HOME/bin/docker-uv-status"
 ```
 
 このリポジトリが持っている cache や install 済み tool も削除したい場合は、次を実行してください。
 
 ```sh
-rm -rf .docker/projects .docker/uv-tools .docker/uv-cache
-mkdir -p .docker/projects .docker/uv-tools .docker/uv-cache
-touch .docker/projects/.gitkeep .docker/uv-tools/.gitkeep .docker/uv-cache/.gitkeep
+rm -rf .docker/projects .docker/state .docker/uv-tools .docker/uv-cache
+mkdir -p .docker/projects .docker/state/projects .docker/state/tools .docker/uv-tools .docker/uv-cache
+touch .docker/projects/.gitkeep .docker/state/projects/.gitkeep .docker/state/tools/.gitkeep .docker/uv-tools/.gitkeep .docker/uv-cache/.gitkeep
 ```
 
 さらに、このプロジェクト用の Docker リソースまで片付ける場合は次です。
@@ -145,12 +197,15 @@ docker image rm ghcr.io/astral-sh/uv:python3.12-trixie-slim
 主なファイルは次の通りです。
 
 - `compose.yaml`: `uv` コンテナ用の Docker Compose 定義
+- `duv`: 状態確認とメンテナンス操作をまとめた対話コンソール
 - `docker-uv-common.sh`: project 検出と cache 分離に使う共通ロジック
+- `docker-uv-status`: 動きの少ない project cache や tool を確認する補助コマンド
 - `uv`: `uv` 用のホスト側ラッパースクリプト
 - `uvx`: `uvx` 用のホスト側ラッパースクリプト
 - `uv-refresh`: `uv sync --refresh` 用の補助ラッパー
 - `uv-cache-clean`: `uv cache clean` 用の補助ラッパー
 - `.docker/projects/`: project ごとの cache ディレクトリ
+- `.docker/state/`: 見直し候補を出すための軽い利用記録
 - `.docker/uv-tools/`: `uv tool install` の永続データと実行ファイル置き場
 
 ## ライセンス

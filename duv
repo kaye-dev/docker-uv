@@ -1,0 +1,398 @@
+#!/bin/sh
+set -eu
+
+resolve_path() {
+  target=$1
+
+  while [ -L "$target" ]; do
+    target_dir=$(CDPATH='' cd -- "$(dirname -- "$target")" && pwd -P)
+    target_link=$(readlink "$target")
+
+    case "$target_link" in
+      /*) target=$target_link ;;
+      *) target=$target_dir/$target_link ;;
+    esac
+  done
+
+  target_dir=$(CDPATH='' cd -- "$(dirname -- "$target")" && pwd -P)
+  printf '%s/%s\n' "$target_dir" "$(basename -- "$target")"
+}
+
+duv_is_interactive() {
+  [ -t 0 ] && [ -t 1 ]
+}
+
+duv_pause() {
+  if duv_is_interactive; then
+    printf '\nPress Enter to continue...'
+    read -r _
+  fi
+}
+
+duv_confirm() {
+  prompt=$1
+  printf '%s [y/N]: ' "$prompt"
+  read -r reply || return 1
+
+  case $reply in
+    y|Y|yes|YES|Yes)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+duv_parse_detail() {
+  raw=$1
+  DUV_PARSED_STATUS=${raw%%"$DOCKER_UV_TAB"*}
+  if [ "$DUV_PARSED_STATUS" = "$raw" ]; then
+    DUV_PARSED_DETAIL=
+  else
+    DUV_PARSED_DETAIL=${raw#*"$DOCKER_UV_TAB"}
+  fi
+}
+
+duv_refresh_status() {
+  DUV_DOCKER_PATH=$(docker_uv_command_path docker)
+  DUV_COLIMA_PATH=$(docker_uv_command_path colima)
+  DUV_DOCKER_CONTEXT=$(docker_uv_docker_context_name)
+  DUV_DOCKER_CONTEXT_HOST=$(docker_uv_docker_context_host "$DUV_DOCKER_CONTEXT")
+
+  duv_parse_detail "$(docker_uv_docker_daemon_detail)"
+  DUV_DOCKER_STATE=$DUV_PARSED_STATUS
+  DUV_DOCKER_DETAIL=$DUV_PARSED_DETAIL
+
+  duv_parse_detail "$(docker_uv_colima_detail)"
+  DUV_COLIMA_STATE=$DUV_PARSED_STATUS
+  DUV_COLIMA_DETAIL=$DUV_PARSED_DETAIL
+
+  if [ "$DUV_DOCKER_STATE" = "ready" ]; then
+    DUV_READY=yes
+  else
+    DUV_READY=no
+  fi
+
+  DUV_TOOL_COUNT=$(docker_uv_count_installed_tools)
+  DUV_STALE_PROJECTS=$(docker_uv_count_stale_projects "$DUV_STALE_DAYS")
+  DUV_STALE_TOOLS=$(docker_uv_count_stale_tools "$DUV_STALE_DAYS")
+  DUV_CURRENT_PROJECT_CACHE=$(docker_uv_dir_size "$PROJECT_CACHE_ROOT/$PROJECT_KEY")
+}
+
+duv_print_status_summary() {
+  if [ -n "$DUV_DOCKER_PATH" ]; then
+    docker_cli_summary="present ($DUV_DOCKER_PATH)"
+  else
+    docker_cli_summary='missing'
+  fi
+
+  if [ -n "$DUV_COLIMA_PATH" ]; then
+    colima_install_summary="present ($DUV_COLIMA_PATH)"
+  else
+    colima_install_summary='missing'
+  fi
+
+  printf 'docker-uv runtime summary\n'
+  printf -- '- current project: %s\n' "$MOUNT_ROOT"
+  printf -- '- current project cache: %s\n' "$DUV_CURRENT_PROJECT_CACHE"
+  printf -- '- docker cli: %s\n' "$docker_cli_summary"
+  printf -- '- docker context: %s\n' "${DUV_DOCKER_CONTEXT:-none}"
+  printf -- '- context host: %s\n' "${DUV_DOCKER_CONTEXT_HOST:-unknown}"
+  printf -- '- docker daemon: %s\n' "$DUV_DOCKER_STATE"
+  if [ -n "$DUV_DOCKER_DETAIL" ]; then
+    printf '  detail: %s\n' "$DUV_DOCKER_DETAIL"
+  fi
+  printf -- '- colima install: %s\n' "$colima_install_summary"
+  printf -- '- colima: %s\n' "$DUV_COLIMA_STATE"
+  if [ -n "$DUV_COLIMA_DETAIL" ]; then
+    printf '  detail: %s\n' "$DUV_COLIMA_DETAIL"
+  fi
+  printf -- '- docker-uv readiness: %s\n' "$DUV_READY"
+  printf -- '- execution model: ephemeral containers (docker compose run --rm)\n'
+  printf -- '- installed tools: %s\n' "$DUV_TOOL_COUNT"
+  printf -- '- stale review candidates (> %s days): %s project cache(s), %s tool(s)\n' \
+    "$DUV_STALE_DAYS" "$DUV_STALE_PROJECTS" "$DUV_STALE_TOOLS"
+}
+
+duv_unavailable_reason_start_colima() {
+  if [ -z "$DUV_COLIMA_PATH" ]; then
+    printf 'Colima is not installed\n'
+  elif [ "$DUV_COLIMA_STATE" = "running" ]; then
+    printf 'Colima is already running\n'
+  else
+    return 1
+  fi
+}
+
+duv_unavailable_reason_stop_colima() {
+  if [ -z "$DUV_COLIMA_PATH" ]; then
+    printf 'Colima is not installed\n'
+  elif [ "$DUV_COLIMA_STATE" != "running" ]; then
+    printf 'Colima is not running\n'
+  else
+    return 1
+  fi
+}
+
+duv_unavailable_reason_uninstall_tool() {
+  if [ "$DUV_TOOL_COUNT" -eq 0 ]; then
+    printf 'No tools are installed\n'
+  elif [ "$DUV_READY" != "yes" ]; then
+    printf 'Docker runtime is not ready\n'
+  else
+    return 1
+  fi
+}
+
+duv_print_menu_line() {
+  number=$1
+  label=$2
+  reason=$3
+
+  if [ -n "$reason" ]; then
+    printf '%s. %s [unavailable: %s]\n' "$number" "$label" "$reason"
+  else
+    printf '%s. %s\n' "$number" "$label"
+  fi
+}
+
+duv_print_menu() {
+  printf '\nActions\n'
+  duv_print_menu_line 1 'Refresh status' ''
+  duv_print_menu_line 2 'Start Colima' "$(duv_unavailable_reason_start_colima || true)"
+  duv_print_menu_line 3 'Stop Colima' "$(duv_unavailable_reason_stop_colima || true)"
+  duv_print_menu_line 4 'Show installed tools' ''
+  duv_print_menu_line 5 'Show storage usage' ''
+  duv_print_menu_line 6 'Show review candidates' ''
+  duv_print_menu_line 7 'Clear current project cache' ''
+  duv_print_menu_line 8 'Uninstall an installed tool' "$(duv_unavailable_reason_uninstall_tool || true)"
+  duv_print_menu_line 9 'Clear all project caches' ''
+  duv_print_menu_line 10 'Clear all installed tools' ''
+  duv_print_menu_line 11 'Reset all local docker-uv data' ''
+  printf '0. Exit\n'
+}
+
+duv_mark_usage() {
+  docker_uv_record_project_usage
+}
+
+duv_action_refresh() {
+  duv_refresh_status
+  duv_print_status_summary
+}
+
+duv_action_start_colima() {
+  if reason=$(duv_unavailable_reason_start_colima); then
+    printf '%s\n' "$reason"
+    return 0
+  fi
+
+  if ! duv_confirm 'Start Colima?'; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  if colima start; then
+    duv_mark_usage
+    duv_refresh_status
+    duv_print_status_summary
+  else
+    printf 'Failed to start Colima.\n'
+  fi
+}
+
+duv_action_stop_colima() {
+  if reason=$(duv_unavailable_reason_stop_colima); then
+    printf '%s\n' "$reason"
+    return 0
+  fi
+
+  if ! duv_confirm 'Stop Colima?'; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  if colima stop; then
+    duv_mark_usage
+    duv_refresh_status
+    duv_print_status_summary
+  else
+    printf 'Failed to stop Colima.\n'
+  fi
+}
+
+duv_action_show_installed_tools() {
+  docker_uv_print_installed_tools
+
+  if [ "$DUV_READY" = "yes" ]; then
+    printf '\nRuntime tool list\n'
+    if ! docker_uv_run_compose uv uv tool list; then
+      printf -- '- failed to query runtime tool list\n'
+    fi
+  else
+    printf '\nRuntime tool list\n'
+    printf -- '- unavailable: Docker runtime is not ready\n'
+  fi
+
+  duv_mark_usage
+}
+
+duv_action_show_storage() {
+  docker_uv_print_storage_usage
+  duv_mark_usage
+}
+
+duv_action_show_review_candidates() {
+  docker_uv_print_review_candidates "$DUV_STALE_DAYS"
+  duv_mark_usage
+}
+
+duv_action_clear_current_project_cache() {
+  if ! duv_confirm "Clear cache for the current project ($MOUNT_ROOT)?"; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  docker_uv_clear_current_project_cache
+  duv_mark_usage
+  duv_refresh_status
+  printf 'Cleared the current project cache.\n'
+}
+
+duv_action_uninstall_tool() {
+  if reason=$(duv_unavailable_reason_uninstall_tool); then
+    printf '%s\n' "$reason"
+    return 0
+  fi
+
+  docker_uv_print_installed_tools
+  printf '\nTool name to uninstall: '
+  read -r tool_name || return 0
+
+  if [ -z "$tool_name" ]; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  if [ ! -d "$TOOLS_SOURCE/tools/$tool_name" ]; then
+    printf 'Tool not found: %s\n' "$tool_name"
+    return 0
+  fi
+
+  if ! duv_confirm "Uninstall tool '$tool_name'?"; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  if docker_uv_run_compose uv uv tool uninstall "$tool_name"; then
+    docker_uv_remove_tool_state "$tool_name"
+    duv_mark_usage
+    duv_refresh_status
+    printf 'Uninstalled tool: %s\n' "$tool_name"
+  else
+    printf 'Failed to uninstall tool: %s\n' "$tool_name"
+  fi
+}
+
+duv_action_clear_all_project_caches() {
+  if ! duv_confirm 'Clear all project caches?'; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  docker_uv_clear_all_project_caches
+  duv_mark_usage
+  duv_refresh_status
+  printf 'Cleared all project caches.\n'
+}
+
+duv_action_clear_all_installed_tools() {
+  if ! duv_confirm 'Clear all installed tools?'; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  docker_uv_clear_all_installed_tools
+  duv_mark_usage
+  duv_refresh_status
+  printf 'Cleared all installed tools.\n'
+}
+
+duv_action_reset_all_local_data() {
+  if ! duv_confirm 'Reset all local docker-uv data?'; then
+    printf 'Cancelled.\n'
+    return 0
+  fi
+
+  docker_uv_reset_all_local_data
+  duv_refresh_status
+  printf 'Reset all local docker-uv data.\n'
+}
+
+SCRIPT_PATH=$(resolve_path "$0")
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
+. "$REPO_ROOT/docker-uv-common.sh"
+
+docker_uv_init "$SCRIPT_PATH"
+DOCKER_UV_NO_HINTS=1
+export DOCKER_UV_NO_HINTS
+DUV_STALE_DAYS=${DOCKER_UV_RECOMMEND_AFTER_DAYS:-30}
+
+duv_mark_usage
+duv_refresh_status
+duv_print_status_summary
+
+while :; do
+  duv_print_menu
+  printf '\nSelect an action: '
+  if ! read -r choice; then
+    printf '\n'
+    exit 0
+  fi
+
+  printf '\n'
+  case $choice in
+    1)
+      duv_action_refresh
+      ;;
+    2)
+      duv_action_start_colima
+      ;;
+    3)
+      duv_action_stop_colima
+      ;;
+    4)
+      duv_action_show_installed_tools
+      ;;
+    5)
+      duv_action_show_storage
+      ;;
+    6)
+      duv_action_show_review_candidates
+      ;;
+    7)
+      duv_action_clear_current_project_cache
+      ;;
+    8)
+      duv_action_uninstall_tool
+      ;;
+    9)
+      duv_action_clear_all_project_caches
+      ;;
+    10)
+      duv_action_clear_all_installed_tools
+      ;;
+    11)
+      duv_action_reset_all_local_data
+      ;;
+    0)
+      exit 0
+      ;;
+    *)
+      printf 'Unknown action: %s\n' "$choice"
+      ;;
+  esac
+
+  duv_pause
+done

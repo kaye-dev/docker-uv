@@ -2,6 +2,13 @@
 !.docker/uv-cache/.gitkeep
 .docker/projects/*
 !.docker/projects/.gitkeep
+.docker/state/*
+!.docker/state/projects/
+!.docker/state/tools/
+.docker/state/projects/*
+!.docker/state/projects/.gitkeep
+.docker/state/tools/*
+!.docker/state/tools/.gitkeep
 .docker/uv-tools/*
 !.docker/uv-tools/.gitkeep
 .venv/

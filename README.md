@@ -16,6 +16,39 @@ The actual `uv` and `uvx` binaries live inside Docker. On the macOS side, you on
 - Docker Desktop, Colima, or another Docker environment with `docker compose`
 - a POSIX-compatible shell such as `zsh` or `sh`
 
+## Alternative: Colima
+
+If you do not want Docker Desktop, a small Colima-based setup also works on macOS.
+
+Install the required packages with Homebrew:
+
+```sh
+brew install docker docker-compose colima
+```
+
+Depending on your Homebrew setup, you may also need to register Docker Compose as a Docker CLI plugin:
+
+```sh
+mkdir -p ~/.docker/cli-plugins
+ln -sfn "$(brew --prefix)/opt/docker-compose/bin/docker-compose" ~/.docker/cli-plugins/docker-compose
+```
+
+Then start Colima and verify that Docker is available:
+
+```sh
+colima start
+docker version
+docker compose version
+docker container run hello-world
+```
+
+If another tool cannot find the Docker socket while Colima is running, point it at Colima's socket explicitly:
+
+```sh
+echo 'export DOCKER_HOST="unix://${HOME}/.colima/default/docker.sock"' >> ~/.zshrc
+source ~/.zshrc
+```
+
 ## How It Works
 
 The wrappers in `./uv` and `./uvx` resolve the repository root, start `ghcr.io/astral-sh/uv:python3.12-trixie-slim` with Docker Compose, and mount the nearest project root or Git root from your current directory. If neither exists, they fall back to the current directory.
@@ -23,6 +56,8 @@ The wrappers in `./uv` and `./uvx` resolve the repository root, start `ghcr.io/a
 Your relative working directory is preserved inside the container, so running commands from a subdirectory still behaves as expected. Cache data is stored per discovered project root, Git root, or current-directory fallback under `.docker/projects/`, and installed tools are kept under `.docker/uv-tools/`.
 
 In practice, this means you can run `uv` or `uvx` from different working directories without installing `uv` natively and without mixing all cache state into one host-global location.
+
+`docker-uv` does not keep a long-running service container. It uses ephemeral `docker compose run --rm` invocations, so "running" means "the Docker runtime is reachable and this repository can launch a fresh container when needed".
 
 ## What This Solves
 
@@ -43,10 +78,12 @@ From the repository root, create symlinks in `~/bin`:
 
 ```sh
 mkdir -p "$HOME/bin"
+ln -sf "$(pwd)/duv" "$HOME/bin/duv"
 ln -sf "$(pwd)/uv" "$HOME/bin/uv"
 ln -sf "$(pwd)/uvx" "$HOME/bin/uvx"
 ln -sf "$(pwd)/uv-refresh" "$HOME/bin/uv-refresh"
 ln -sf "$(pwd)/uv-cache-clean" "$HOME/bin/uv-cache-clean"
+ln -sf "$(pwd)/docker-uv-status" "$HOME/bin/docker-uv-status"
 ```
 
 If `~/bin` is not already on your `PATH`, add this to `~/.zshrc`:
@@ -77,12 +114,27 @@ uvx ruff --version
 There are also a couple of convenience commands:
 
 ```sh
+duv
 uv-refresh
 uv-cache-clean
 uv-cache-clean ruff
+docker-uv-status
 ```
 
 `uv-refresh` is a shortcut for `uv sync --refresh`. `uv-cache-clean` is a shortcut for `uv cache clean` against the current project's isolated cache.
+
+`duv` is an interactive console for `docker-uv`. It can:
+
+- show Docker, context, Colima, and `docker-uv` readiness
+- start and stop Colima when it is installed
+- list installed tools
+- show storage usage for caches, tools, and metadata
+- show stale review candidates
+- clear project caches, remove tools, or reset local `docker-uv` data with confirmation
+
+The wrappers also keep lightweight local usage metadata under `.docker/state/`. `docker-uv-status` shows project caches and installed tools that have been inactive for 30 days or longer by default.
+
+When stale items exist, the wrappers may print a short reminder at most once per day. Set `DOCKER_UV_NO_HINTS=1` if you want to suppress that message.
 
 If your MCP client or local automation launches stdio servers with `uvx`, you can point it to this wrapper instead of a host-installed `uvx`. Configuration format varies by client, so this repository does not prescribe a single MCP config format.
 
@@ -101,15 +153,15 @@ The first run pulls the Docker image if it is not already available locally.
 If you want to stop using these wrappers, remove the symlinks:
 
 ```sh
-rm -f "$HOME/bin/uv" "$HOME/bin/uvx" "$HOME/bin/uv-refresh" "$HOME/bin/uv-cache-clean"
+rm -f "$HOME/bin/duv" "$HOME/bin/uv" "$HOME/bin/uvx" "$HOME/bin/uv-refresh" "$HOME/bin/uv-cache-clean" "$HOME/bin/docker-uv-status"
 ```
 
 If you also want to remove cache data and installed tools managed by this repository, run:
 
 ```sh
-rm -rf .docker/projects .docker/uv-tools .docker/uv-cache
-mkdir -p .docker/projects .docker/uv-tools .docker/uv-cache
-touch .docker/projects/.gitkeep .docker/uv-tools/.gitkeep .docker/uv-cache/.gitkeep
+rm -rf .docker/projects .docker/state .docker/uv-tools .docker/uv-cache
+mkdir -p .docker/projects .docker/state/projects .docker/state/tools .docker/uv-tools .docker/uv-cache
+touch .docker/projects/.gitkeep .docker/state/projects/.gitkeep .docker/state/tools/.gitkeep .docker/uv-tools/.gitkeep .docker/uv-cache/.gitkeep
 ```
 
 If you want to clean up Docker resources created for this project as well:
@@ -132,12 +184,15 @@ There are also a few things this repository does not change.
 The main files in this repository are:
 
 - `compose.yaml`: Docker Compose definition for the `uv` container
+- `duv`: interactive runtime and maintenance console for `docker-uv`
 - `docker-uv-common.sh`: shared wrapper logic for project discovery and cache isolation
+- `docker-uv-status`: shows inactive project caches and installed tools that are good review candidates
 - `uv`: host-side wrapper for `uv`
 - `uvx`: host-side wrapper for `uvx`
 - `uv-refresh`: convenience wrapper for `uv sync --refresh`
 - `uv-cache-clean`: convenience wrapper for `uv cache clean`
 - `.docker/projects/`: per-project cache directories
+- `.docker/state/`: lightweight local usage metadata for review recommendations
 - `.docker/uv-tools/`: persistent `uv tool install` data and executables
 
 ## License

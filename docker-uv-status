@@ -23,4 +23,4 @@ REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
 . "$REPO_ROOT/docker-uv-common.sh"
 
 docker_uv_init "$SCRIPT_PATH"
-docker_uv_run_inner uv cache clean "$@"
+docker_uv_print_review_candidates "${DOCKER_UV_RECOMMEND_AFTER_DAYS:-30}"
