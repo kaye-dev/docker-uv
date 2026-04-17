@@ -144,6 +144,8 @@ docker-uv-status
 - 古くなった見直し候補の確認
 - project cache の削除、tool の削除、ローカルデータのリセット
 
+対話端末で `duv` を起動した場合は、状態の見分けがしやすいように readiness 系の表示を色分けしています。`ready` や `yes` のような利用可能な状態は緑、利用できない状態は赤で表示されます。
+
 さらに、wrapper は `.docker/state/` 配下に軽い利用記録を残します。`docker-uv-status` を実行すると、30 日以上動きのない project cache や install 済み tool を見直し候補として確認できます。
 
 古い候補がある場合は、wrapper 実行時に 1 日 1 回まで短い案内を表示します。不要であれば `DOCKER_UV_NO_HINTS=1` を設定してください。

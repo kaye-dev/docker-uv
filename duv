@@ -22,6 +22,35 @@ duv_is_interactive() {
   [ -t 0 ] && [ -t 1 ]
 }
 
+duv_use_color() {
+  [ -t 1 ]
+}
+
+duv_setup_colors() {
+  if duv_use_color; then
+    DUV_COLOR_GREEN=$(printf '\033[32m')
+    DUV_COLOR_RED=$(printf '\033[31m')
+    DUV_COLOR_RESET=$(printf '\033[0m')
+  else
+    DUV_COLOR_GREEN=
+    DUV_COLOR_RED=
+    DUV_COLOR_RESET=
+  fi
+}
+
+duv_colorize_ready_state() {
+  value=$1
+
+  case $value in
+    ready|running|yes)
+      printf '%s%s%s\n' "$DUV_COLOR_GREEN" "$value" "$DUV_COLOR_RESET"
+      ;;
+    *)
+      printf '%s%s%s\n' "$DUV_COLOR_RED" "$value" "$DUV_COLOR_RESET"
+      ;;
+  esac
+}
+
 duv_pause() {
   if duv_is_interactive; then
     printf '\nPress Enter to continue...'
@@ -93,13 +122,16 @@ duv_print_status_summary() {
     colima_install_summary='missing'
   fi
 
+  docker_daemon_display=$(duv_colorize_ready_state "$DUV_DOCKER_STATE")
+  readiness_display=$(duv_colorize_ready_state "$DUV_READY")
+
   printf 'docker-uv runtime summary\n'
   printf -- '- current project: %s\n' "$MOUNT_ROOT"
   printf -- '- current project cache: %s\n' "$DUV_CURRENT_PROJECT_CACHE"
   printf -- '- docker cli: %s\n' "$docker_cli_summary"
   printf -- '- docker context: %s\n' "${DUV_DOCKER_CONTEXT:-none}"
   printf -- '- context host: %s\n' "${DUV_DOCKER_CONTEXT_HOST:-unknown}"
-  printf -- '- docker daemon: %s\n' "$DUV_DOCKER_STATE"
+  printf -- '- docker daemon: %s\n' "$docker_daemon_display"
   if [ -n "$DUV_DOCKER_DETAIL" ]; then
     printf '  detail: %s\n' "$DUV_DOCKER_DETAIL"
   fi
@@ -108,7 +140,7 @@ duv_print_status_summary() {
   if [ -n "$DUV_COLIMA_DETAIL" ]; then
     printf '  detail: %s\n' "$DUV_COLIMA_DETAIL"
   fi
-  printf -- '- docker-uv readiness: %s\n' "$DUV_READY"
+  printf -- '- docker-uv readiness: %s\n' "$readiness_display"
   printf -- '- execution model: ephemeral containers (docker compose run --rm)\n'
   printf -- '- installed tools: %s\n' "$DUV_TOOL_COUNT"
   printf -- '- stale review candidates (> %s days): %s project cache(s), %s tool(s)\n' \
@@ -339,6 +371,7 @@ DOCKER_UV_NO_HINTS=1
 export DOCKER_UV_NO_HINTS
 DUV_STALE_DAYS=${DOCKER_UV_RECOMMEND_AFTER_DAYS:-30}
 
+duv_setup_colors
 duv_mark_usage
 duv_refresh_status
 duv_print_status_summary

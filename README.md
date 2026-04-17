@@ -132,6 +132,8 @@ docker-uv-status
 - show stale review candidates
 - clear project caches, remove tools, or reset local `docker-uv` data with confirmation
 
+When `duv` is running in an interactive terminal, readiness states are color-coded for visibility: green for usable states such as `ready` and `yes`, red for unavailable states.
+
 The wrappers also keep lightweight local usage metadata under `.docker/state/`. `docker-uv-status` shows project caches and installed tools that have been inactive for 30 days or longer by default.
 
 When stale items exist, the wrappers may print a short reminder at most once per day. Set `DOCKER_UV_NO_HINTS=1` if you want to suppress that message.
