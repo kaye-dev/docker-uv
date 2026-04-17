@@ -20,47 +20,7 @@ resolve_path() {
 
 SCRIPT_PATH=$(resolve_path "$0")
 REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
-CURRENT_DIR=$(pwd -P)
-COMMAND_NAME=$(basename -- "$SCRIPT_PATH")
-MOUNT_ROOT=$CURRENT_DIR
-SEARCH_DIR=$CURRENT_DIR
+. "$REPO_ROOT/docker-uv-common.sh"
 
-while :; do
-  if [ -e "$SEARCH_DIR/pyproject.toml" ] || [ -e "$SEARCH_DIR/uv.toml" ] || [ -e "$SEARCH_DIR/.git" ]; then
-    MOUNT_ROOT=$SEARCH_DIR
-    break
-  fi
-
-  if [ "$SEARCH_DIR" = "/" ]; then
-    break
-  fi
-
-  SEARCH_DIR=$(CDPATH='' cd -- "$SEARCH_DIR/.." && pwd -P)
-done
-
-case "$CURRENT_DIR" in
-  "$MOUNT_ROOT")
-    CONTAINER_DIR=/workspace
-    ;;
-  "$MOUNT_ROOT"/*)
-    CONTAINER_DIR=/workspace${CURRENT_DIR#"$MOUNT_ROOT"}
-    ;;
-  *)
-    printf 'Failed to resolve mount root for %s\n' "$CURRENT_DIR" >&2
-    exit 1
-    ;;
-esac
-
-run_compose() {
-  env UID="$(id -u)" GID="$(id -g)" WORKSPACE_DIR="$MOUNT_ROOT" \
-    docker compose \
-      --project-directory "$REPO_ROOT" \
-      -f "$REPO_ROOT/compose.yaml" \
-      run --rm --no-deps "$@"
-}
-
-if [ -t 0 ] && [ -t 1 ]; then
-  run_compose -w "$CONTAINER_DIR" uv "$COMMAND_NAME" "$@"
-else
-  run_compose -T -w "$CONTAINER_DIR" uv "$COMMAND_NAME" "$@"
-fi
+docker_uv_init "$SCRIPT_PATH"
+docker_uv_exec uv "$COMMAND_NAME" "$@"

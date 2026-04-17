@@ -15,10 +15,10 @@ services:
         source: ${WORKSPACE_DIR:-.}
         target: /workspace
       - type: bind
-        source: ./.docker/uv-cache
+        source: ${UV_CACHE_SOURCE:-./.docker/uv-cache}
         target: /var/uv-cache
       - type: bind
-        source: ./.docker/uv-tools
+        source: ${UV_TOOLS_SOURCE:-./.docker/uv-tools}
         target: /var/uv-tools
     stdin_open: true
     tty: true

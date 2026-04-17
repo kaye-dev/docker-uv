@@ -23,4 +23,4 @@ REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$SCRIPT_PATH")" && pwd -P)
 . "$REPO_ROOT/docker-uv-common.sh"
 
 docker_uv_init "$SCRIPT_PATH"
-docker_uv_exec uv "$COMMAND_NAME" "$@"
+docker_uv_exec uv uv sync --refresh "$@"

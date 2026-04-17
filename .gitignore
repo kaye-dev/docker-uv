@@ -1,5 +1,7 @@
 .docker/uv-cache/*
 !.docker/uv-cache/.gitkeep
+.docker/projects/*
+!.docker/projects/.gitkeep
 .docker/uv-tools/*
 !.docker/uv-tools/.gitkeep
 .venv/
